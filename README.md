@@ -1,6 +1,6 @@
 # machin-game-mtlm-rpg-poc — Emberdeep
 
-**POOC** — A terminal RPG where **the player is an AI agent and the human only watches**.
+**POC** — A terminal RPG where **the player is an AI agent and the human only watches**.
 Every player intent is classified by a self-hosted **mtlm-router** head
 (`rpg.head`, trained on the frozen `m7router3s384` trunk) into one of 12 typed
 actions — move, attack, flee, talk, inspect, loot, use_item, rest, inventory,
@@ -62,7 +62,7 @@ for the full documented lesson.
 First playthrough (rpg v1):
 - 134 turns, dragon slain
 - Router misses that cost the run: `equip the sword` → loot @0.73 (never equipped → low attack → died)
-- Average router latency: 374ms over SSH tunnel
+- Average router latency: 374ms over tunnel
 - Corpus feedback → rpg2.head fixed: `light the torch`, `take the dragon amulet`, `head east`
 - Regression: `what is my hp` → escalate @1.0 (meta corpus poisoned in-game status queries)
 
