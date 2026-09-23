@@ -1,0 +1,47 @@
+// world.src — the Emberdeep dungeon: rooms, exits, monsters, items, npcs.
+// Flat parallel arrays (no nested slices in MFL).
+
+var RN = []string{"Entrance Hall", "Dark Corridor", "Armory", "Shrine of Embers", "Goblin Den", "Flooded Cellar", "Crypt", "Old Bridge", "Treasure Vault", "Dragon's Lair"}
+
+var RD = []string{
+	"Torchlight fades behind you. The dungeon breathes cold, wet air.",
+	"A narrow corridor; scratch marks line the walls. Something small skitters.",
+	"Racks of rusted weapons sag under their own weight. One sword still gleams.",
+	"A warm shrine. An old hermit tends a small flame and pretends not to see you.",
+	"Bones and filth. A goblin snarls over a heap of stolen things.",
+	"Ankle-deep black water. Something glints beneath the surface.",
+	"Stone sarcophagi in rows. A skeleton drags itself upright as you enter.",
+	"A rope bridge over a black chasm. A hooded merchant waits at the midpoint.",
+	"An iron vault, heavy and cold. The lock hangs open.",
+	"Heat. Gold heaped in dunes. A dragon sleeps on the summit of its hoard.",
+}
+
+// exits: index by room — N,S,E,W (-1 = none)
+var EXN = []int{1, 4, -1, -1, 5, -1, 7, 8, 9, -1}
+var EXS = []int{-1, 0, -1, -1, 1, 4, -1, 6, 7, 8}
+var EXE = []int{-1, 2, -1, 1, -1, 6, -1, -1, -1, -1}
+var EXW = []int{-1, 3, 1, -1, -1, -1, 5, -1, -1, -1}
+
+var MN = []string{"rat", "goblin", "skeleton", "dragon"}
+var MROOM = []int{1, 4, 6, 9}
+var MHP = []int{4, 9, 12, 30}
+var MATK = []int{1, 2, 3, 5}
+var MALIVE = []int{1, 1, 1, 1}
+var MGOLD = []int{0, 8, 5, 50}
+var MHP0 = []int{4, 9, 12, 30}
+
+var IN = []string{"torch", "rusty sword", "healing potion", "iron key", "silver coins", "loose gems", "dragon amulet"}
+var IROOM = []int{0, 2, 3, 4, 5, 8, 9}  // -1 = carried, -2 = consumed
+var IROOM0 = []int{0, 2, 3, 4, 5, 8, 9}
+var IGOLD = []int{0, 0, 0, 0, 15, 25, 0}
+
+var NPCN = []string{"hermit", "merchant"}
+var NPCR = []int{3, 7}
+var NPCLINE = []string{
+	"The hermit rasps: \"The beast below fears a steady hand more than a sharp blade. Rest before you face it.\"",
+	"The merchant whispers: \"Potions, ten gold. My wares are cheaper than a funeral.\"",
+}
+
+var LOCKED_ROOM = 8
+var LOCK_KEY = "iron key"
+var WIN_ITEM = "dragon amulet"

@@ -1,0 +1,510 @@
+// game.src — Emberdeep: an agent-played dungeon. The player is an AI; the human watches.
+// Every player intent is classified by the mtlm-router (rpg head) into a typed action.
+
+var hp = 24
+var maxhp = 24
+var gold = 0
+var room = 0
+var prev = 0
+var turn = 0
+var over = 0
+var win = 0
+var equipped = 0
+var torchlit = 0
+var vault_open = 0
+var merchant_sold = 0
+var hint = ""
+var last_route_i = 14
+var last_conf = 0.0
+var glog = ""
+var ROUTER = "http://127.0.0.1:8321/v1/route"
+var TURNF = "/tmp/mtlm-rpg-turns.jsonl"
+var ROUTES = []string{"move", "attack", "flee", "talk", "inspect", "loot", "use_item", "rest", "inventory", "map", "status", "help", "escalate", "unclear", "offline"}
+
+// serial single-actor server: no handler goroutines, main arena never resets,
+// so globals may hold computed strings. The trade is a slow memory leak
+// (a few KB per request) — fine for a game session.
+func say(s) {
+	glog = glog + s + "\n"
+	if len(glog) > 30000 { glog = substr(glog, len(glog) - 24000, len(glog)) }
+	println(s)
+	flush()
+}
+
+func jesc(s) (r) {
+	r = s
+	r = replace(r, "\\", "\\\\")
+	r = replace(r, "\"", "\\\"")
+	r = replace(r, "\n", "\\n")
+	r = replace(r, "\r", "")
+	r = replace(r, "\t", "\\t")
+}
+
+func roll(n) (v) {
+	b := rand_bytes(1)
+	v = byte_at(b, 0) % n
+}
+
+func has_item(name) (f) {
+	f = 0
+	i := 0
+	while i < len(IN) {
+		if IN[i] == name && IROOM[i] == -1 { f = 1 }
+		i = i + 1
+	}
+}
+
+func take_item(i) {
+	IROOM[i] = -1
+	if IGOLD[i] > 0 { gold = gold + IGOLD[i]  IROOM[i] = -2 }
+	if IN[i] == WIN_ITEM { win = 1 }
+}
+
+func diridx(s) (d) {
+	d = -1
+	s = to_lower(s)
+	if index(s, "north") >= 0 || index(s, "forward") >= 0 || index(s, "deeper") >= 0 || index(s, "ahead") >= 0 { d = 0 }
+	if index(s, "south") >= 0 { d = 1 }
+	if index(s, "east") >= 0 || index(s, "right") >= 0 { d = 2 }
+	if index(s, "west") >= 0 || index(s, "left") >= 0 { d = 3 }
+}
+
+func exit_at(d) (t) {
+	t = -1
+	if d == 0 { t = EXN[room] }
+	if d == 1 { t = EXS[room] }
+	if d == 2 { t = EXE[room] }
+	if d == 3 { t = EXW[room] }
+}
+
+func exits_str() (s) {
+	s = ""
+	if EXN[room] >= 0 { s = s + "north→" + RN[EXN[room]] + " " }
+	if EXS[room] >= 0 { s = s + "south→" + RN[EXS[room]] + " " }
+	if EXE[room] >= 0 { s = s + "east→" + RN[EXE[room]] + " " }
+	if EXW[room] >= 0 { s = s + "west→" + RN[EXW[room]] + " " }
+}
+
+func monster_in_room() (m) {
+	m = -1
+	i := 0
+	while i < len(MN) {
+		if MALIVE[i] == 1 && MROOM[i] == room { m = i }
+		i = i + 1
+	}
+}
+
+func monster_named(s) (m) {
+	m = -1
+	i := 0
+	while i < len(MN) {
+		if index(s, MN[i]) >= 0 && MALIVE[i] == 1 && MROOM[i] == room { m = i }
+		i = i + 1
+	}
+}
+
+func find_room_item(name) (k) {
+	k = -1
+	i := 0
+	while i < len(IN) {
+		if IN[i] == name && IROOM[i] == room { k = i }
+		i = i + 1
+	}
+}
+
+func find_carried(name) (k) {
+	k = -1
+	i := 0
+	while i < len(IN) {
+		if IN[i] == name && IROOM[i] == -1 { k = i }
+		i = i + 1
+	}
+}
+
+func item_named(s) (k) {
+	k = -1
+	i := 0
+	while i < len(IN) {
+		if IROOM[i] == room && index(s, IN[i]) >= 0 { k = i }
+		i = i + 1
+	}
+	// short aliases (non-recursive — "rusty sword" itself contains "sword")
+	if k < 0 {
+		if index(s, "potion") >= 0 { k = find_room_item("healing potion") }
+		if index(s, "sword") >= 0 { k = find_room_item("rusty sword") }
+		if index(s, "key") >= 0 { k = find_room_item("iron key") }
+		if index(s, "amulet") >= 0 { k = find_room_item("dragon amulet") }
+		if index(s, "coins") >= 0 || index(s, "gold") >= 0 { k = find_room_item("silver coins") }
+		if index(s, "gems") >= 0 { k = find_room_item("loose gems") }
+	}
+}
+
+func carried_named(s) (k) {
+	k = -1
+	i := 0
+	while i < len(IN) {
+		if IROOM[i] == -1 && index(s, IN[i]) >= 0 { k = i }
+		i = i + 1
+	}
+	if k < 0 {
+		if index(s, "potion") >= 0 { k = find_carried("healing potion") }
+		if index(s, "sword") >= 0 { k = find_carried("rusty sword") }
+		if index(s, "key") >= 0 { k = find_carried("iron key") }
+		if index(s, "amulet") >= 0 { k = find_carried("dragon amulet") }
+		if index(s, "torch") >= 0 { k = find_carried("torch") }
+	}
+}
+
+func swipe() {
+	m := monster_in_room()
+	if m >= 0 {
+		if roll(3) == 0 { say("You slip past the " + MN[m] + " unscathed.")  return }
+		hp = hp - MATK[m]
+		say("The " + MN[m] + " strikes as you move — " + str(MATK[m]) + " damage.")
+	}
+}
+
+func do_move(intent) {
+	low := to_lower(intent)
+	t := -1
+	if index(low, "back") >= 0 || index(low, "return") >= 0 { t = prev }
+	if t < 0 {
+		// room-name match against reachable exits
+		i := 0
+		while i < len(RN) {
+			lname := to_lower(RN[i])
+			short := lname
+			sp := index(lname, " ")
+			if sp >= 0 { short = substr(lname, 0, sp) }
+			if (index(low, lname) >= 0 || index(low, short) >= 0) && (EXN[room] == i || EXS[room] == i || EXE[room] == i || EXW[room] == i) { t = i }
+			i = i + 1
+		}
+	}
+	if t < 0 {
+		d := diridx(low)
+		if d >= 0 { t = exit_at(d) }
+	}
+	if t < 0 { say("You pace — there is no way through in that direction.")  return }
+	if t == LOCKED_ROOM && vault_open == 0 && has_item(LOCK_KEY) == 0 {
+		say("An iron door bars the way to the " + RN[t] + ". It is locked.")
+		return
+	}
+	if t == LOCKED_ROOM && vault_open == 0 { vault_open = 1  say("The iron key turns — the vault door groans open.") }
+	swipe()
+	if hp <= 0 { say("You collapse before crossing the threshold.")  over = 1  return }
+	prev = room
+	room = t
+	say("You enter the " + RN[room] + ". " + RD[room])
+	m := monster_in_room()
+	if m >= 0 { say("A " + MN[m] + " blocks your path!") }
+}
+
+func do_attack(intent) {
+	m := monster_named(to_lower(intent))
+	if m < 0 { m = monster_in_room() }
+	if m < 0 { say("You swing at shadows. Nothing here fights back.")  return }
+	atk := 4
+	if equipped == 1 { atk = 7 }
+	r := roll(20) + 1
+	say("You strike at the " + MN[m] + " (roll " + str(r) + ").")
+	if r + atk >= 12 {
+		dmg := atk + roll(4)
+		MHP[m] = MHP[m] - dmg
+		say("A solid hit — " + str(dmg) + " damage to the " + MN[m] + ".")
+		if MHP[m] <= 0 {
+			MALIVE[m] = 0
+			say("The " + MN[m] + " falls.")
+			if MGOLD[m] > 0 { gold = gold + MGOLD[m]  say("Among the remains: " + str(MGOLD[m]) + " gold.") }
+		}
+	} else {
+		say("Your blow misses.")
+	}
+	if MALIVE[m] == 1 {
+		if roll(5) == 0 {
+			say("You dodge the " + MN[m] + "'s counter.")
+		} else {
+			hp = hp - MATK[m]
+			say("The " + MN[m] + " counters — " + str(MATK[m]) + " damage.")
+		}
+	}
+	if hp <= 0 { say("Darkness takes you. The tale ends here.")  over = 1 }
+}
+
+func do_flee(intent) {
+	exits := []int{}
+	if EXN[room] >= 0 { exits = append(exits, EXN[room]) }
+	if EXS[room] >= 0 { exits = append(exits, EXS[room]) }
+	if EXE[room] >= 0 { exits = append(exits, EXE[room]) }
+	if EXW[room] >= 0 { exits = append(exits, EXW[room]) }
+	if len(exits) == 0 { say("No way out!")  return }
+	swipe()
+	if hp <= 0 { over = 1  say("You collapse mid-flight.")  return }
+	t := exits[roll(len(exits))]
+	prev = room
+	room = t
+	say("You break away and stumble into the " + RN[room] + ".")
+}
+
+func do_talk(intent) {
+	low := to_lower(intent)
+	i := 0
+	while i < len(NPCN) {
+		if NPCR[i] == room && (index(low, NPCN[i]) >= 0 || index(low, "talk") >= 0 || index(low, "speak") >= 0 || index(low, "ask") >= 0 || index(low, "say") >= 0 || index(low, "greet") >= 0) {
+			say(NPCLINE[i])
+			if NPCN[i] == "merchant" && merchant_sold == 0 && gold >= 10 {
+				gold = gold - 10
+				merchant_sold = 1
+				j := 0
+				while j < len(IN) {
+					if IN[j] == "healing potion" && IROOM[j] != -1 { IROOM[j] = -1 }
+					j = j + 1
+				}
+				say("The merchant slips a healing potion into your pack. (-10 gold)")
+			}
+			return
+		}
+		i = i + 1
+	}
+	m := monster_in_room()
+	if m >= 0 { say("The " + MN[m] + " has no interest in words.")  return }
+	say("Your voice echoes. No one answers.")
+}
+
+func do_inspect(intent) {
+	if (room == 6 || room == 8) && torchlit == 0 {
+		say("Darkness swallows the details. A light would help.")
+		say(RD[room])
+		return
+	}
+	say(RD[room])
+	m := monster_in_room()
+	if m >= 0 { say("A " + MN[m] + " watches you, ready (hp~" + str(MHP[m]) + ").") }
+	i := 0
+	found := 0
+	while i < len(IN) {
+		if IROOM[i] == room { say("On the ground: a " + IN[i] + ".")  found = 1 }
+		i = i + 1
+	}
+	i = 0
+	while i < len(NPCN) {
+		if NPCR[i] == room { say("Present: the " + NPCN[i] + ".")  found = 1 }
+		i = i + 1
+	}
+	if found == 0 && m < 0 { say("Nothing else of note.") }
+}
+
+func do_loot(intent) {
+	k := item_named(to_lower(intent))
+	if k < 0 {
+		// grab anything present
+		i := 0
+		while i < len(IN) {
+			if IROOM[i] == room { k = i }
+			i = i + 1
+		}
+	}
+	if k < 0 { say("Nothing here worth taking.")  return }
+	if IN[k] == WIN_ITEM && monster_in_room() >= 0 {
+		say("The dragon's hoard is guarded. The beast must fall first.")
+		return
+	}
+	take_item(k)
+	say("Taken: " + IN[k] + ".")
+	if IN[k] == WIN_ITEM { say("The Dragon Amulet hums with warmth. The Emberdeep is beaten — you win.")  win = 1 }
+}
+
+func do_use(intent) {
+	k := carried_named(to_lower(intent))
+	if k < 0 { say("You rummage your pack — no such thing to use.")  return }
+	if IN[k] == "healing potion" {
+		hp = hp + 10
+		if hp > maxhp { hp = maxhp }
+		IROOM[k] = -2
+		say("Warmth spreads through you. +10 hp (now " + str(hp) + ").")
+		return
+	}
+	if IN[k] == "torch" { torchlit = 1  say("The torch flares. Shadows retreat to the corners.")  return }
+	if IN[k] == "rusty sword" { equipped = 1  say("You grip the rusty sword. It will do. (atk 7)")  return }
+	if IN[k] == "iron key" {
+		if room == 7 || room == 8 { vault_open = 1  say("The key fits the vault lock. Click.") } else {
+			say("The key turns in empty air. Its lock is elsewhere.")
+		}
+		return
+	}
+	if IN[k] == "dragon amulet" { say("The amulet pulses. Victory is already yours.")  return }
+	say("You fiddle with the " + IN[k] + ". Nothing happens.")
+}
+
+func do_rest() {
+	if monster_in_room() >= 0 { say("No rest with a foe breathing nearby.")  swipe()  if hp <= 0 { over = 1 }  return }
+	hp = hp + 3
+	if hp > maxhp { hp = maxhp }
+	say("You breathe, bind your wounds. +3 hp (now " + str(hp) + ").")
+}
+
+func do_inventory() {
+	say("Pack: " + str(gold) + " gold.")
+	i := 0
+	while i < len(IN) {
+		if IROOM[i] == -1 { say("  - " + IN[i]) }
+		i = i + 1
+	}
+}
+
+func do_status() {
+	say("HP " + str(hp) + "/" + str(maxhp) + " · gold " + str(gold) + " · atk " + str(4 + equipped * 3) + " · turn " + str(turn))
+}
+
+func do_help() {
+	say("Speak your intent: go somewhere, attack, flee, talk, inspect, loot, use an item, rest, inventory, map, status.")
+	say("The router decides what your words mean — the dungeon decides what they cost.")
+}
+
+type RouteRes struct{ route string confidence float }
+
+func route_intent(intent) (rt) {
+	rt = "escalate"
+	body := "{\"state\":" + json(intent) + "}"
+	t0 := now_ms()
+	code, rb, rerr := http_request("POST", ROUTER, []string{"content-type: application/json"}, body)
+	ms := now_ms() - t0
+	conf := 0.0
+	if rerr == "" && code == 200 {
+		rr := parse(rb, RouteRes{})
+		if rr.route != "" { rt = rr.route }
+		conf = rr.confidence
+	} else {
+		say("(router unreachable — the fates are silent)")
+		rt = "offline"
+	}
+	last_route_i = 14
+	i := 0
+	while i < len(ROUTES) {
+		if ROUTES[i] == rt { last_route_i = i }
+		i = i + 1
+	}
+	last_conf = conf
+	tsz := file_size(TURNF)
+	if tsz < 0 { tsz = 0 }
+	write_file_at(TURNF, tsz, bytes("{\"turn\":" + str(turn) + ",\"intent\":" + json(intent) + ",\"route\":" + json(rt) + ",\"conf\":" + str(conf) + ",\"ms\":" + str(ms) + "}\n"))
+	say("[router] " + rt + " @ " + str(conf) + " (" + str(ms) + "ms)")
+	if conf < 0.45 && rt != "offline" { rt = "unclear" }
+}
+
+type ActReq struct{ intent string }
+type HintReq struct{ text string }
+type St struct{ room string desc string exits string monsters string items string npcs string hp int maxhp int gold int turn int hint string over int win int route string conf string }
+
+func state_json() (s) {
+	m := monster_in_room()
+	mons := ""
+	if m >= 0 { mons = MN[m] + "(hp~" + str(MHP[m]) + ")" }
+	its := ""
+	i := 0
+	while i < len(IN) {
+		if IROOM[i] == room { its = its + IN[i] + " " }
+		i = i + 1
+	}
+	nps := ""
+	i = 0
+	while i < len(NPCN) {
+		if NPCR[i] == room { nps = nps + NPCN[i] + " " }
+		i = i + 1
+	}
+	h := hint
+	hint = ""
+	st := St{room: RN[room], desc: RD[room], exits: exits_str(), monsters: mons, items: its, npcs: nps, hp: hp, maxhp: maxhp, gold: gold, turn: turn, hint: h, over: over, win: win, route: ROUTES[last_route_i], conf: str(last_conf)}
+	s = json(st)
+}
+
+func act(req) (res) {
+	a := parse(req.body, ActReq{})
+	intent := trim(a.intent)
+	if over == 1 || win == 1 {
+		if index(to_lower(intent), "restart") < 0 {
+			res = ok_json("{\"ended\":1,\"state\":" + state_json() + "}")
+			return
+		}
+		// restart
+		hp = 24  gold = 0  room = 0  prev = 0  turn = 0  over = 0  win = 0  equipped = 0  torchlit = 0  vault_open = 0  merchant_sold = 0
+		i := 0
+		while i < len(MN) { MALIVE[i] = 1  MHP[i] = MHP0[i]  i = i + 1 }
+		i = 0
+		while i < len(IN) { IROOM[i] = IROOM0[i]  i = i + 1 }
+		say("--- The tale begins again. ---")
+		res = ok_json("{\"ended\":0,\"state\":" + state_json() + "}")
+		return
+	}
+	if intent == "" { res = ok_json("{\"error\":\"empty intent\"}")  return }
+	turn = turn + 1
+	say("")
+	say("» " + intent)
+	rt := route_intent(intent)
+	if rt == "move" { do_move(intent) }
+	if rt == "attack" { do_attack(intent) }
+	if rt == "flee" { do_flee(intent) }
+	if rt == "talk" { do_talk(intent) }
+	if rt == "inspect" { do_inspect(intent) }
+	if rt == "loot" { do_loot(intent) }
+	if rt == "use_item" { do_use(intent) }
+	if rt == "rest" { do_rest() }
+	if rt == "inventory" { do_inventory() }
+	if rt == "map" { say("Exits: " + exits_str()) }
+	if rt == "status" { do_status() }
+	if rt == "help" { do_help() }
+	if rt == "unclear" { say("The intent wavers — the world does not understand. (low confidence)") }
+	if rt == "escalate" { say("The gods ignore those words entirely.") }
+	res = ok_json("{\"route\":\"" + ROUTES[last_route_i] + "\",\"conf\":" + str(last_conf) + ",\"state\":" + state_json() + "}")
+}
+
+func watchpage() (h) {
+	h = "<!doctype html><meta http-equiv=\"refresh\" content=\"4\"><style>body{background:#0d1117;color:#c9d1d9;font-family:monospace;max-width:820px;margin:24px auto;padding:0 16px}h1{color:#f0b429;font-size:1.3em}pre{white-space:pre-wrap;background:#161b22;border:1px solid #30363d;padding:16px;border-radius:8px;line-height:1.5}form{margin-top:16px}input{width:70%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:8px;font-family:monospace}button{background:#f0b429;border:0;padding:8px 14px;font-family:monospace;cursor:pointer}</style>"
+	h = h + "<h1>Emberdeep — an agent plays; you watch</h1>"
+	h = h + "<pre>" + glog + "</pre>"
+	h = h + "<form method=\"post\" action=\"/hint\"><input name=\"text\" placeholder=\"whisper an opinion to the adventurer…\"><button>hint</button></form>"
+}
+
+func act_hint(req) (res) {
+	b := req.body
+	k := index(b, "text=")
+	t := ""
+	if k >= 0 { t = substr(b, k + 5, len(b)) }
+	t = replace(t, "+", " ")
+	if len(t) > 0 {
+		hint = t
+		say("")
+		say("✦ a voice from beyond: " + t)
+	}
+	res = response("303 See Other", "text/plain", "ok")
+	res.location = "/"
+}
+
+func main() {
+	if env("RPG_ROUTER") != "" { ROUTER = env("RPG_ROUTER") }
+	say("╔══════════════════════════════════════╗")
+	say("║  EMBERDEEP — the agent-played dungeon ║")
+	say("╚══════════════════════════════════════╝")
+	say("Router: " + ROUTER)
+	say("")
+	say(RD[0])
+	say("Exits: " + exits_str())
+	r := new_router()
+	route(r, "GET", "/", func(req) { res := response("200 OK", "text/html; charset=utf-8", watchpage())  return res })
+	route(r, "GET", "/state", func(req) { return ok_json(state_json()) })
+	route(r, "POST", "/act", func(req) { return act(req) })
+	route(r, "POST", "/hint", func(req) { return act_hint(req) })
+	server := listen(8460)
+	if server < 0 { println("emberdeep: cannot listen on 8460")  return }
+	println("emberdeep on http://localhost:8460")
+	flush()
+	for {
+		conn := accept(server)
+		raw := read_request_bytes(conn)
+		req := parse_request_bytes(raw)
+		req.remote = peer_addr(conn)
+		res := dispatch(r, req)
+		out := "HTTP/1.1 " + res.status + "\r\nContent-Type: " + res.ctype + "\r\nContent-Length: " + str(len(res.body)) + "\r\nConnection: close\r\n\r\n" + res.body
+		write(conn, out)
+		close(conn)
+	}
+}
