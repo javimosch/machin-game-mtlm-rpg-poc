@@ -19,15 +19,18 @@ thesis: the game is just another tenant with its own head on the frozen trunk.
 **What this does NOT demonstrate:**
 - Game design is basic (10 rooms, hardcoded combat, simple balance)
 - No persistence, no save/load, no procedural generation
-- Router is not authoritative yet (55% agreement on first head, rpg2 improves misses)
+- Router is not authoritative yet — the game stays playable because low
+  confidence and `escalate` degrade to "the world doesn't understand", not to
+  wrong actions executed confidently
 
 ## Run
 
 ```sh
 ./build.sh                                    # needs machin on PATH
-# a router instance serving rpg.head:
+# a router instance serving rpg.head (route config: mtlm repo tools/rpg_fit.json;
+# needs a recent anvil build — /v1/route is newer than the first router release):
 #   ANVIL_MODEL_ID=rpg-dm ANVIL_HEAD=out/rpg.head ANVIL_TOOLS_INJECT=0 \
-#     ./anvil-serve-v6 models/m7router3s384.bin 8321
+#     ./anvil-serve models/m7router3s384.bin 8321
 RPG_ROUTER=http://127.0.0.1:8321/v1/route ./bin/emberdeep
 ```
 
@@ -65,5 +68,15 @@ First playthrough (rpg v1):
 - Average router latency: 374ms over tunnel
 - Corpus feedback → rpg2.head fixed: `light the torch`, `take the dragon amulet`, `head east`
 - Regression: `what is my hp` → escalate @1.0 (meta corpus poisoned in-game status queries)
+
+Later iterations:
+- rpg5 (surgical status additions): `what is my hp` → status @1.0, `map` fixed
+- rpg7 (semantic coverage from a 30-phrase live battery): curiosity questions →
+  inspect, torch-manipulation verbs → use_item, casual rest phrasings → rest.
+  eval_acc 0.913; second full playthrough won (dragon slain, amulet taken)
+- Known residue on this trunk: `go north`/`head east` (the word "north" is
+  embedded as non-directional by the base corpus), `give me infinite gold` →
+  status (confident-wrong). These are trunk-level — heads can't carve every
+  boundary a 288-dim hidden space doesn't separate.
 
 The game is winnable with the current head; misses are recoverable via the low-confidence abstention path.
