@@ -34,6 +34,23 @@ thesis: the game is just another tenant with its own head on the frozen trunk.
 RPG_ROUTER=http://127.0.0.1:8321/v1/route ./bin/emberdeep
 ```
 
+### Against the MoE router (expert pin)
+
+When the router runs `ANVIL_EXPERTS=...,rpg:models/rpg_pool_L-4_mean.head`, the
+game can pin its lane — the request skips the domain gate entirely (a game
+already knows its domain; the gate is for mixed front-door traffic):
+
+```sh
+RPG_ROUTER=http://rbm4:8401/v1/route RPG_EXPERT=rpg ./bin/emberdeep
+```
+
+`RPG_EXPERT` sends `{"state":..., "expert":"rpg"}` on every `/act`. Pinned
+requests also skip the noul/score OOD vetoes — the rpg head's own `escalate`
+class is the abstention path (off-game intents like "whats the weather"
+still delegate instead of executing a nonsense action).
+
+`./demo.sh` replays a golden-path intent sequence against a running game.
+
 - Human watches: `http://localhost:8460` (auto-refreshing story log + hint box)
   or `tail` the process stdout.
 - Agent plays: `GET /state` → `POST /act {"intent":"..."}` → repeat.

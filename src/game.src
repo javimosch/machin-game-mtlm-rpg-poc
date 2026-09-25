@@ -18,6 +18,7 @@ var last_route_i = 14
 var last_conf = 0.0
 var glog = ""
 var ROUTER = "http://127.0.0.1:8321/v1/route"
+var EXPERT = ""
 var TURNF = "/tmp/mtlm-rpg-turns.jsonl"
 var ROUTES = []string{"move", "attack", "flee", "talk", "inspect", "loot", "use_item", "rest", "inventory", "map", "status", "help", "escalate", "unclear", "offline"}
 
@@ -364,7 +365,9 @@ type RouteRes struct{ route string confidence float }
 
 func route_intent(intent) (rt) {
 	rt = "escalate"
-	body := "{\"state\":" + json(intent) + "}"
+	body := "{\"state\":" + json(intent)
+	if len(EXPERT) > 0 { body = body + ",\"expert\":\"" + EXPERT + "\"" }
+	body = body + "}"
 	t0 := now_ms()
 	code, rb, rerr := http_request("POST", ROUTER, []string{"content-type: application/json"}, body)
 	ms := now_ms() - t0
@@ -481,6 +484,7 @@ func act_hint(req) (res) {
 
 func main() {
 	if env("RPG_ROUTER") != "" { ROUTER = env("RPG_ROUTER") }
+	if env("RPG_EXPERT") != "" { EXPERT = env("RPG_EXPERT") }
 	say("╔══════════════════════════════════════╗")
 	say("║  EMBERDEEP — the agent-played dungeon ║")
 	say("╚══════════════════════════════════════╝")
