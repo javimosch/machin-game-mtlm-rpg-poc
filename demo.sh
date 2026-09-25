@@ -1,32 +1,59 @@
 #!/bin/sh
-# Emberdeep showcase — fire a golden-path sequence of natural-language intents
-# at the running game (default http://localhost:8460) and print the router's
-# route + confidence for each. The watcher page shows the full narrative.
-#   ./demo.sh            # against a running emberdeep
-#   GAME=http://host:8460 ./demo.sh
+set -eu
 GAME="${GAME:-http://localhost:8460}"
+post() {
+    intent="$1"
+    body=$(python3 -c 'import json,sys; print(json.dumps({"intent":sys.argv[1]}))' "$intent")
+    response=$(curl -fsS -m 20 -X POST "$GAME/act" -H 'content-type: application/json' -d "$body")
+    python3 -c 'import json,sys; r=json.loads(sys.argv[2]); s=r.get("state",{}); print("» %-38s → %-9s HP %s/%s · %-16s · %s"%(sys.argv[1],r.get("route","restart"),s.get("hp","?"),s.get("maxhp","?"),s.get("room",""),s.get("objective","")))' "$intent" "$response"
+    sleep 0.15
+}
+post "restart"
 while IFS= read -r intent; do
-    [ -z "$intent" ] && continue
-    curl -s -m 15 -X POST "$GAME/act" -H 'content-type: application/json' \
-        -d "{\"intent\":\"$intent\"}" | python3 -c "
-import json,sys
-r=json.load(sys.stdin)
-print('» %-44s -> %-10s conf %s' % ('$intent', r.get('route','?'), r.get('conf','')))"
-    sleep 0.4
+    [ -z "$intent" ] || post "$intent"
 done <<'EOF'
-grab the torch from the wall
-head north through the corridor
-what do i see around me
-check my inventory
-keep going deeper into the dungeon
-attack the goblin with my sword
-swing at it once more
-loot the body
-check my health
+take the torch
+light the torch
+go north
+go east to the armory
+take the rusty sword
+equip the rusty sword
+head west
+west to the shrine
+take the healing potion
+speak with the hermit
+east to the corridor
+north into the goblin den
+attack the goblin
+attack the goblin
+attack the goblin
+attack the goblin
+loot the iron key
+north to the flooded cellar
+east into the crypt
+attack the skeleton
+attack the skeleton
+attack the skeleton
+attack the skeleton
+attack the skeleton
+north across the bridge
+north into the vault
+take the steel sword
+equip the steel sword
+north into the dragon's lair
 drink the healing potion
-ask the hermit about the relic
-where am i
-flee back toward the entrance
-rest a while
-whats the weather outside
+attack the dragon
+attack the dragon
+attack the dragon
+attack the dragon
+attack the dragon
+loot the dragon amulet
+south to the vault
+south across the bridge
+south into the crypt
+west into the cellar
+south through the goblin den
+south to the dark corridor
+south into the entrance hall
 EOF
+curl -fsS -m 5 "$GAME/state" | python3 -c 'import json,sys; s=json.load(sys.stdin); print("Outcome:",s["outcome"],"—",s["phase"],"—",s["room"]); print("Final objective:",s["objective"]); sys.exit(0 if s["outcome"]=="won" else 1)'

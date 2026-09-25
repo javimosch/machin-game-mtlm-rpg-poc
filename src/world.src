@@ -16,6 +16,19 @@ var RD = []string{
 	"Heat. Gold heaped in dunes. A dragon sleeps on the summit of its hoard.",
 }
 
+var RL = []string{
+	"Carved over the lintel, half worn away: HALL OF THE EMBER-THANE. LET THE FIRE SERVE, NEVER RULE.",
+	"The scratch marks are letters. Miners' last words: VAEL CAME WITH THE THAW. THE THANE SEALED THE DOOR ABOVE US.",
+	"A smith's mark on the racks: the Ember-Thane's own forge armed this hall once.",
+	"The shrine flame is old dwarven emberfire — it has burned without fuel for a hundred years.",
+	"The stolen heap is miners' gear: lanterns, wedding rings, a child's whistle. The goblin found them deeper in.",
+	"The glint underwater is a drowned lantern, still lit — emberfire does not drown.",
+	"The newest sarcophagus reads: HERE LIES THE LAST EMBER-THANE. HE BOUGHT THE SEAL WITH HIS HOUSE.",
+	"A plaque on the rope anchor: THE THANE'S TITHE PAID FOR THIS BRIDGE. WALK LIGHTLY, THE DEEP REMEMBERS.",
+	"Inside the vault door, scratched from within: THE SWORD WAS NEVER THE POINT. THE AMULET IS THE SEAL.",
+	"The hoard is not treasure to Vaelmorax. It is a grave she is building for the mountain.",
+}
+
 // exits: index by room — N,S,E,W (-1 = none)
 var EXN = []int{1, 4, -1, -1, 5, -1, 7, 8, 9, -1}
 var EXS = []int{-1, 0, -1, -1, 1, 4, -1, 6, 7, 8}
@@ -30,16 +43,16 @@ var MALIVE = []int{1, 1, 1, 1}
 var MGOLD = []int{0, 8, 5, 50}
 var MHP0 = []int{4, 9, 12, 30}
 
-var IN = []string{"torch", "rusty sword", "healing potion", "iron key", "silver coins", "loose gems", "dragon amulet"}
-var IROOM = []int{0, 2, 3, 4, 5, 8, 9}  // -1 = carried, -2 = consumed
-var IROOM0 = []int{0, 2, 3, 4, 5, 8, 9}
-var IGOLD = []int{0, 0, 0, 0, 15, 25, 0}
+var IN = []string{"torch", "rusty sword", "healing potion", "iron key", "silver coins", "loose gems", "dragon amulet", "steel sword"}
+var IROOM = []int{0, 2, 3, 4, 5, 8, 9, 8}  // -1 = carried, -2 = consumed
+var IROOM0 = []int{0, 2, 3, 4, 5, 8, 9, 8}
+var IGOLD = []int{0, 0, 0, 0, 15, 25, 0, 0}
 
 var NPCN = []string{"hermit", "merchant"}
 var NPCR = []int{3, 7}
 var NPCLINE = []string{
-	"The hermit rasps: \"The beast below fears a steady hand more than a sharp blade. Rest before you face it.\"",
-	"The merchant whispers: \"Potions, ten gold. My wares are cheaper than a funeral.\"",
+	"The hermit rasps: \"I kept the Thane's fire lit while the mountain forgot him. Vaelmorax coils around his seal — take the amulet, climb out, and the deep goes back to sleep. May the ember keep you.\"",
+	"The merchant whispers: \"Potions, ten gold. The Thane's men paid better, but they're all bones now. My wares are cheaper than a funeral.\"",
 }
 
 var LOCKED_ROOM = 8

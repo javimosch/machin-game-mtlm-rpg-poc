@@ -13,15 +13,20 @@ thesis: the game is just another tenant with its own head on the frozen trunk.
 **What this demonstrates:**
 - Typed routing with confidence calibration and abstention
 - Customer-specific heads on a shared frozen trunk
+- A narrated quest with preparation, key-gated progression, combat, equipment,
+  healing, a recover-and-return objective, victory and defeat
+- An agent-facing state contract for planning; a human-facing HUD and live story
 - Real playthroughs producing router-miss data for head iteration
 - Pure MFL runtime (no Go/Rust/Python in the game binary)
 
-**What this does NOT demonstrate:**
-- Game design is basic (10 rooms, hardcoded combat, simple balance)
-- No persistence, no save/load, no procedural generation
-- Router is not authoritative yet — the game stays playable because low
-  confidence and `escalate` degrade to "the world doesn't understand", not to
-  wrong actions executed confidently
+**Current limits:**
+- Fixed 10-room map and hand-authored encounters; no persistence, save/load, or
+  procedural generation
+- Combat uses compact randomized rules rather than a full tabletop system
+- This is a showcase PoC, not a production game or a claim of universal router
+  accuracy; some action-shaped off-domain requests can still be confidently
+  misrouted (e.g. a password-reset request to an RPG action), so the pinned head
+  is not a general out-of-domain safety boundary
 
 ## Run
 
@@ -49,15 +54,35 @@ requests also skip the noul/score OOD vetoes — the rpg head's own `escalate`
 class is the abstention path (off-game intents like "whats the weather"
 still delegate instead of executing a nonsense action).
 
-`./demo.sh` replays a golden-path intent sequence against a running game.
+`./demo.sh` runs a complete sample quest against the running game and exits
+nonzero unless it reaches victory. The game also exposes `POST /restart` for the
+watcher and `POST /act {"intent":"restart"}` for an agent; either resets a run at
+any time.
 
 - Human watches: `http://localhost:8460` (auto-refreshing story log + hint box)
   or `tail` the process stdout.
-- Agent plays: `GET /state` → `POST /act {"intent":"..."}` → repeat.
+- Agent plays: `GET /state` → `POST /act {"intent":"..."}` → repeat. State
+  includes the live objective, quest phase, inventory, equipped weapon, nearby
+  threats, exits, HP, and terminal outcome (`playing`, `won`, `lost`).
 - Human opines: `POST /hint` (form field `text`) — lands in the story and the
   next `/state.hint`.
 - Per-turn router telemetry (intent/route/conf/ms) appends to
   `/tmp/mtlm-rpg-turns.jsonl`.
+
+## Story and win/loss
+
+The Ember-Thane forged an amulet to seal the mountain's fire. Vaelmorax took
+his hall and sleeps on the seal. The Nameless must reach the Dragon's Lair,
+claim the amulet, and return to the Entrance Hall. The hermit's blessing,
+weapon upgrades, a key-gated vault, hostile rooms, consumable healing, and
+randomized combat make the descent a real multi-stage run. Reaching zero HP is
+defeat; carrying the amulet back to the entrance is victory. After either ending,
+`POST /act {"intent":"restart"}` or `POST /restart` resets the run at any time.
+
+The state endpoint exposes `goal`, `objective`, `phase`, `inventory`, `weapon`,
+`attack`, `outcome`, and `has_amulet` so an agent can plan from actual game state
+rather than only reading the story log. The watcher presents the same objective,
+health, equipment, and inventory as a HUD above the live narrative.
 
 ## Layout
 
@@ -65,7 +90,10 @@ still delegate instead of executing a nonsense action).
   custom serial accept loop: handler-goroutine arenas corrupt cross-request
   state, and a single-player game doesn't need concurrency)
 - `src/world.src` — the dungeon (rooms/exits/monsters/items/npcs, flat arrays)
-- `src/game.src` — engine + intent router client + endpoints
+- `src/quest.src` — history, quest phase/objective, victory and defeat
+- `src/game.src` — world simulation + action effects
+- `src/state.src` — router client + agent-facing state contract
+- `src/watch.src` — watcher HUD and escaped story rendering
 
 ## Gotcha that mattered
 

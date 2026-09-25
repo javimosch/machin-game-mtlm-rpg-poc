@@ -1,0 +1,74 @@
+type RouteRes struct{ route string confidence float }
+type ActReq struct{ intent string }
+type HintReq struct{ text string }
+type St struct{ room string desc string exits string monsters string items string npcs string inventory string weapon string hp int maxhp int attack int gold int turn int hint string over int win int outcome string phase string goal string objective string has_amulet int route string conf string }
+
+func route_intent(intent) (rt) {
+	rt = "escalate"
+	body := "{\"state\":" + json(intent)
+	if len(EXPERT) > 0 { body = body + ",\"expert\":\"" + EXPERT + "\"" }
+	body = body + "}"
+	t0 := now_ms()
+	code, rb, rerr := http_request("POST", ROUTER, []string{"content-type: application/json"}, body)
+	ms := now_ms() - t0
+	conf := 0.0
+	if rerr == "" && code == 200 {
+		rr := parse(rb, RouteRes{})
+		if rr.route != "" { rt = rr.route }
+		conf = rr.confidence
+	} else {
+		say("(router unreachable — the fates are silent)")
+		rt = "offline"
+	}
+	last_route_i = 14
+	i := 0
+	while i < len(ROUTES) {
+		if ROUTES[i] == rt { last_route_i = i }
+		i = i + 1
+	}
+	last_conf = conf
+	tsz := file_size(TURNF)
+	if tsz < 0 { tsz = 0 }
+	write_file_at(TURNF, tsz, bytes("{\"turn\":" + str(turn) + ",\"intent\":" + json(intent) + ",\"route\":" + json(rt) + ",\"conf\":" + str(conf) + ",\"ms\":" + str(ms) + "}\n"))
+	say("[router] " + rt + " @ " + str(conf) + " (" + str(ms) + "ms)")
+	if conf < 0.45 && rt != "offline" { rt = "unclear" }
+}
+
+func inventory_str() (s) {
+	s = ""
+	i := 0
+	while i < len(IN) {
+		if IROOM[i] == -1 {
+			if len(s) > 0 { s = s + ", " }
+			s = s + IN[i]
+			if IN[i] == weapon_name() { s = s + " (equipped)" }
+		}
+		i = i + 1
+	}
+	if len(s) == 0 { s = "empty" }
+}
+
+func state_json() (s) {
+	m := monster_in_room()
+	mons := ""
+	if m >= 0 { mons = MN[m] + "(hp~" + str(MHP[m]) + ")" }
+	its := ""
+	i := 0
+	while i < len(IN) {
+		if IROOM[i] == room { if len(its) > 0 { its = its + ", " }  its = its + IN[i] }
+		i = i + 1
+	}
+	nps := ""
+	i = 0
+	while i < len(NPCN) {
+		if NPCR[i] == room { if len(nps) > 0 { nps = nps + ", " }  nps = nps + NPCN[i] }
+		i = i + 1
+	}
+	outcome := "playing"
+	if over == 1 { outcome = "lost" }
+	if win == 1 { outcome = "won" }
+	h := hint
+	hint = ""
+	st := St{room: RN[room], desc: RD[room], exits: exits_str(), monsters: mons, items: its, npcs: nps, inventory: inventory_str(), weapon: weapon_name(), hp: hp, maxhp: maxhp, attack: attack_power(), gold: gold, turn: turn, hint: h, over: over, win: win, outcome: outcome, phase: quest_phase(), goal: GOAL, objective: quest_objective(), has_amulet: has_amulet, route: ROUTES[last_route_i], conf: str(last_conf)}
+	s = json(st)
+}

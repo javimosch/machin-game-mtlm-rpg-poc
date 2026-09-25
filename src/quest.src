@@ -1,0 +1,72 @@
+var GOAL = "Recover the Dragon Amulet from Vaelmorax's hoard and carry it back to the Entrance Hall."
+var LORE = []string{
+	"Long ago the Emberdeep was the Hall of the Ember-Thane, the dwarf-lord",
+	"who bound the mountain's fire into a single amulet and wore it as a seal.",
+	"When the thaw came, the dragon Vaelmorax took the hall, slew the Thane,",
+	"and now sleeps coiled around the seal she cannot unmake.",
+	"",
+	"You are the Nameless — a will sent down in a body of ash and rope.",
+	"Bring the amulet to the surface, and the deep goes back to sleep.",
+}
+
+func win_game() {
+	if has_amulet == 1 && room == 0 && win == 0 {
+		win = 1
+		say("")
+		say("You climb into the light with the seal in your fist.")
+		say("Below, the mountain exhales — the deep goes back to sleep.")
+		say("THE NAMELESS PREVAILS. EMBERDEEP IS YOURS.")
+	}
+}
+
+func lose_game() {
+	if over == 0 {
+		hp = 0
+		over = 1
+		say("")
+		say("Your ember gutters out. The mountain closes over the Nameless.")
+		say("THE DEEP CLAIMS ANOTHER. The tale ends here.")
+	}
+}
+
+func quest_phase() (s) {
+	s = "The Descent"
+	if win == 1 { s = "Victory" }
+	if over == 1 { s = "Defeat" }
+	if has_amulet == 1 && win == 0 && over == 0 { s = "The Return" }
+	if MALIVE[3] == 0 && has_amulet == 0 && over == 0 { s = "Claim the Seal" }
+	if vault_open == 1 && MALIVE[3] == 1 && has_amulet == 0 && over == 0 { s = "The Dragon's Lair" }
+}
+
+func quest_objective() (s) {
+	s = "Take and light the torch; explore west to the Shrine of Embers and speak with the hermit. The Armory lies east of the corridor."
+	if blessed == 1 { s = "Reach the Armory east of the Dark Corridor; take and equip the rusty sword." }
+	if equipped > 0 && has_item(LOCK_KEY) == 0 { s = "Defeat the goblin in Goblin Den and loot its iron key." }
+	if has_item(LOCK_KEY) == 1 && vault_open == 0 { s = "Carry the iron key through the Flooded Cellar, Crypt, and Old Bridge to unlock the Treasure Vault." }
+	if vault_open == 1 && MALIVE[3] == 1 { s = "Cross the Treasure Vault into Dragon's Lair and defeat Vaelmorax." }
+	if MALIVE[3] == 0 && has_amulet == 0 { s = "Search the Dragon's Lair and take the Dragon Amulet." }
+	if has_amulet == 1 {
+		s = "Return the Dragon Amulet to the Entrance Hall."
+		if room == 9 { s = "Go south from Dragon's Lair to the Treasure Vault." }
+		if room == 8 { s = "Go south from the Treasure Vault to the Old Bridge." }
+		if room == 7 { s = "Go south from the Old Bridge into the Crypt." }
+		if room == 6 { s = "Go west from the Crypt into the Flooded Cellar." }
+		if room == 5 { s = "Go south from the Flooded Cellar to Goblin Den." }
+		if room == 4 { s = "Go south from Goblin Den to the Dark Corridor." }
+		if room == 1 { s = "Go south from the Dark Corridor to the Entrance Hall." }
+	}
+	if over == 1 { s = "The Nameless has fallen. Restart the tale to try again." }
+	if win == 1 { s = "The seal is home; the Emberdeep is quiet." }
+}
+
+func weapon_name() (s) {
+	s = "unarmed"
+	if equipped == 1 { s = "rusty sword" }
+	if equipped == 2 { s = "steel sword" }
+}
+
+func attack_power() (n) {
+	n = 4
+	if equipped == 1 { n = 7 }
+	if equipped == 2 { n = 9 }
+}

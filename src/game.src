@@ -13,6 +13,8 @@ var equipped = 0
 var torchlit = 0
 var vault_open = 0
 var merchant_sold = 0
+var has_amulet = 0
+var blessed = 0
 var hint = ""
 var last_route_i = 14
 var last_conf = 0.0
@@ -58,7 +60,7 @@ func has_item(name) (f) {
 func take_item(i) {
 	IROOM[i] = -1
 	if IGOLD[i] > 0 { gold = gold + IGOLD[i]  IROOM[i] = -2 }
-	if IN[i] == WIN_ITEM { win = 1 }
+	if IN[i] == WIN_ITEM { has_amulet = 1 }
 }
 
 func diridx(s) (d) {
@@ -132,7 +134,7 @@ func item_named(s) (k) {
 	// short aliases (non-recursive — "rusty sword" itself contains "sword")
 	if k < 0 {
 		if index(s, "potion") >= 0 { k = find_room_item("healing potion") }
-		if index(s, "sword") >= 0 { k = find_room_item("rusty sword") }
+		if index(s, "sword") >= 0 { k = find_room_item("rusty sword")  if k < 0 { k = find_room_item("steel sword") } }
 		if index(s, "key") >= 0 { k = find_room_item("iron key") }
 		if index(s, "amulet") >= 0 { k = find_room_item("dragon amulet") }
 		if index(s, "coins") >= 0 || index(s, "gold") >= 0 { k = find_room_item("silver coins") }
@@ -149,7 +151,7 @@ func carried_named(s) (k) {
 	}
 	if k < 0 {
 		if index(s, "potion") >= 0 { k = find_carried("healing potion") }
-		if index(s, "sword") >= 0 { k = find_carried("rusty sword") }
+		if index(s, "sword") >= 0 { k = find_carried("rusty sword")  if k < 0 { k = find_carried("steel sword") } }
 		if index(s, "key") >= 0 { k = find_carried("iron key") }
 		if index(s, "amulet") >= 0 { k = find_carried("dragon amulet") }
 		if index(s, "torch") >= 0 { k = find_carried("torch") }
@@ -192,20 +194,20 @@ func do_move(intent) {
 	}
 	if t == LOCKED_ROOM && vault_open == 0 { vault_open = 1  say("The iron key turns — the vault door groans open.") }
 	swipe()
-	if hp <= 0 { say("You collapse before crossing the threshold.")  over = 1  return }
+	if hp <= 0 { lose_game()  return }
 	prev = room
 	room = t
 	say("You enter the " + RN[room] + ". " + RD[room])
 	m := monster_in_room()
 	if m >= 0 { say("A " + MN[m] + " blocks your path!") }
+	win_game()
 }
 
 func do_attack(intent) {
 	m := monster_named(to_lower(intent))
 	if m < 0 { m = monster_in_room() }
 	if m < 0 { say("You swing at shadows. Nothing here fights back.")  return }
-	atk := 4
-	if equipped == 1 { atk = 7 }
+	atk := attack_power()
 	r := roll(20) + 1
 	say("You strike at the " + MN[m] + " (roll " + str(r) + ").")
 	if r + atk >= 12 {
@@ -228,7 +230,7 @@ func do_attack(intent) {
 			say("The " + MN[m] + " counters — " + str(MATK[m]) + " damage.")
 		}
 	}
-	if hp <= 0 { say("Darkness takes you. The tale ends here.")  over = 1 }
+	if hp <= 0 { lose_game() }
 }
 
 func do_flee(intent) {
@@ -238,12 +240,21 @@ func do_flee(intent) {
 	if EXE[room] >= 0 { exits = append(exits, EXE[room]) }
 	if EXW[room] >= 0 { exits = append(exits, EXW[room]) }
 	if len(exits) == 0 { say("No way out!")  return }
+	t := -1
+	d := diridx(to_lower(intent))
+	if d >= 0 {
+		t = exit_at(d)
+		if t < 0 { say("There is no escape in that direction.")  return }
+	} else {
+		t = exits[roll(len(exits))]
+	}
+	if t == LOCKED_ROOM && vault_open == 0 && has_item(LOCK_KEY) == 0 { say("An iron door bars that way. It is locked.")  return }
 	swipe()
-	if hp <= 0 { over = 1  say("You collapse mid-flight.")  return }
-	t := exits[roll(len(exits))]
+	if hp <= 0 { lose_game()  return }
 	prev = room
 	room = t
 	say("You break away and stumble into the " + RN[room] + ".")
+	win_game()
 }
 
 func do_talk(intent) {
@@ -252,6 +263,12 @@ func do_talk(intent) {
 	while i < len(NPCN) {
 		if NPCR[i] == room && (index(low, NPCN[i]) >= 0 || index(low, "talk") >= 0 || index(low, "speak") >= 0 || index(low, "ask") >= 0 || index(low, "say") >= 0 || index(low, "greet") >= 0) {
 			say(NPCLINE[i])
+			if NPCN[i] == "hermit" && blessed == 0 {
+				blessed = 1
+				maxhp = maxhp + 6
+				hp = hp + 6
+				say("The hermit presses an ember to your chest. It does not burn — it stays. (+6 max hp)")
+			}
 			if NPCN[i] == "merchant" && merchant_sold == 0 && gold >= 10 {
 				gold = gold - 10
 				merchant_sold = 1
@@ -278,6 +295,7 @@ func do_inspect(intent) {
 		return
 	}
 	say(RD[room])
+	say(RL[room])
 	m := monster_in_room()
 	if m >= 0 { say("A " + MN[m] + " watches you, ready (hp~" + str(MHP[m]) + ").") }
 	i := 0
@@ -311,7 +329,7 @@ func do_loot(intent) {
 	}
 	take_item(k)
 	say("Taken: " + IN[k] + ".")
-	if IN[k] == WIN_ITEM { say("The Dragon Amulet hums with warmth. The Emberdeep is beaten — you win.")  win = 1 }
+	if IN[k] == WIN_ITEM { say("The Dragon Amulet hums against your chest — the mountain's fire leans toward it. Now carry it to the surface.") }
 }
 
 func do_use(intent) {
@@ -326,6 +344,7 @@ func do_use(intent) {
 	}
 	if IN[k] == "torch" { torchlit = 1  say("The torch flares. Shadows retreat to the corners.")  return }
 	if IN[k] == "rusty sword" { equipped = 1  say("You grip the rusty sword. It will do. (atk 7)")  return }
+	if IN[k] == "steel sword" { equipped = 2  say("The Thane-forged steel sings as you draw it. (atk 9)")  return }
 	if IN[k] == "iron key" {
 		if room == 7 || room == 8 { vault_open = 1  say("The key fits the vault lock. Click.") } else {
 			say("The key turns in empty air. Its lock is elsewhere.")
@@ -337,7 +356,7 @@ func do_use(intent) {
 }
 
 func do_rest() {
-	if monster_in_room() >= 0 { say("No rest with a foe breathing nearby.")  swipe()  if hp <= 0 { over = 1 }  return }
+	if monster_in_room() >= 0 { say("No rest with a foe breathing nearby.")  swipe()  if hp <= 0 { lose_game() }  return }
 	hp = hp + 3
 	if hp > maxhp { hp = maxhp }
 	say("You breathe, bind your wounds. +3 hp (now " + str(hp) + ").")
@@ -353,89 +372,43 @@ func do_inventory() {
 }
 
 func do_status() {
-	say("HP " + str(hp) + "/" + str(maxhp) + " · gold " + str(gold) + " · atk " + str(4 + equipped * 3) + " · turn " + str(turn))
+	say("HP " + str(hp) + "/" + str(maxhp) + " · " + weapon_name() + " (atk " + str(attack_power()) + ") · gold " + str(gold) + " · turn " + str(turn))
+	say("Quest: " + quest_phase() + " — " + quest_objective())
 }
 
 func do_help() {
 	say("Speak your intent: go somewhere, attack, flee, talk, inspect, loot, use an item, rest, inventory, map, status.")
+	say("Goal: " + GOAL)
+	say("Next: " + quest_objective())
 	say("The router decides what your words mean — the dungeon decides what they cost.")
 }
 
-type RouteRes struct{ route string confidence float }
-
-func route_intent(intent) (rt) {
-	rt = "escalate"
-	body := "{\"state\":" + json(intent)
-	if len(EXPERT) > 0 { body = body + ",\"expert\":\"" + EXPERT + "\"" }
-	body = body + "}"
-	t0 := now_ms()
-	code, rb, rerr := http_request("POST", ROUTER, []string{"content-type: application/json"}, body)
-	ms := now_ms() - t0
-	conf := 0.0
-	if rerr == "" && code == 200 {
-		rr := parse(rb, RouteRes{})
-		if rr.route != "" { rt = rr.route }
-		conf = rr.confidence
-	} else {
-		say("(router unreachable — the fates are silent)")
-		rt = "offline"
-	}
-	last_route_i = 14
+func reset_game() {
+	hp = 24  maxhp = 24  gold = 0  room = 0  prev = 0  turn = 0  over = 0  win = 0  equipped = 0  torchlit = 0  vault_open = 0  merchant_sold = 0  has_amulet = 0  blessed = 0  hint = ""  last_conf = 0.0  last_route_i = 14
 	i := 0
-	while i < len(ROUTES) {
-		if ROUTES[i] == rt { last_route_i = i }
-		i = i + 1
-	}
-	last_conf = conf
-	tsz := file_size(TURNF)
-	if tsz < 0 { tsz = 0 }
-	write_file_at(TURNF, tsz, bytes("{\"turn\":" + str(turn) + ",\"intent\":" + json(intent) + ",\"route\":" + json(rt) + ",\"conf\":" + str(conf) + ",\"ms\":" + str(ms) + "}\n"))
-	say("[router] " + rt + " @ " + str(conf) + " (" + str(ms) + "ms)")
-	if conf < 0.45 && rt != "offline" { rt = "unclear" }
+	while i < len(MN) { MALIVE[i] = 1  MHP[i] = MHP0[i]  i = i + 1 }
+	i = 0
+	while i < len(IN) { IROOM[i] = IROOM0[i]  i = i + 1 }
+	say("--- The tale begins again. ---")
 }
 
-type ActReq struct{ intent string }
-type HintReq struct{ text string }
-type St struct{ room string desc string exits string monsters string items string npcs string hp int maxhp int gold int turn int hint string over int win int route string conf string }
-
-func state_json() (s) {
-	m := monster_in_room()
-	mons := ""
-	if m >= 0 { mons = MN[m] + "(hp~" + str(MHP[m]) + ")" }
-	its := ""
-	i := 0
-	while i < len(IN) {
-		if IROOM[i] == room { its = its + IN[i] + " " }
-		i = i + 1
-	}
-	nps := ""
-	i = 0
-	while i < len(NPCN) {
-		if NPCR[i] == room { nps = nps + NPCN[i] + " " }
-		i = i + 1
-	}
-	h := hint
-	hint = ""
-	st := St{room: RN[room], desc: RD[room], exits: exits_str(), monsters: mons, items: its, npcs: nps, hp: hp, maxhp: maxhp, gold: gold, turn: turn, hint: h, over: over, win: win, route: ROUTES[last_route_i], conf: str(last_conf)}
-	s = json(st)
+func restart_game(req) (res) {
+	reset_game()
+	res = response("303 See Other", "text/plain", "The tale begins again.")
+	res.location = "/"
 }
 
 func act(req) (res) {
 	a := parse(req.body, ActReq{})
 	intent := trim(a.intent)
-	if over == 1 || win == 1 {
-		if index(to_lower(intent), "restart") < 0 {
-			res = ok_json("{\"ended\":1,\"state\":" + state_json() + "}")
-			return
-		}
-		// restart
-		hp = 24  gold = 0  room = 0  prev = 0  turn = 0  over = 0  win = 0  equipped = 0  torchlit = 0  vault_open = 0  merchant_sold = 0
-		i := 0
-		while i < len(MN) { MALIVE[i] = 1  MHP[i] = MHP0[i]  i = i + 1 }
-		i = 0
-		while i < len(IN) { IROOM[i] = IROOM0[i]  i = i + 1 }
-		say("--- The tale begins again. ---")
+	restart := to_lower(intent)
+	if restart == "restart" || restart == "restart game" || restart == "restart the game" || restart == "start over" {
+		reset_game()
 		res = ok_json("{\"ended\":0,\"state\":" + state_json() + "}")
+		return
+	}
+	if over == 1 || win == 1 {
+		res = ok_json("{\"ended\":1,\"state\":" + state_json() + "}")
 		return
 	}
 	if intent == "" { res = ok_json("{\"error\":\"empty intent\"}")  return }
@@ -460,19 +433,11 @@ func act(req) (res) {
 	res = ok_json("{\"route\":\"" + ROUTES[last_route_i] + "\",\"conf\":" + str(last_conf) + ",\"state\":" + state_json() + "}")
 }
 
-func watchpage() (h) {
-	h = "<!doctype html><meta http-equiv=\"refresh\" content=\"4\"><style>body{background:#0d1117;color:#c9d1d9;font-family:monospace;max-width:820px;margin:24px auto;padding:0 16px}h1{color:#f0b429;font-size:1.3em}pre{white-space:pre-wrap;background:#161b22;border:1px solid #30363d;padding:16px;border-radius:8px;line-height:1.5}form{margin-top:16px}input{width:70%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:8px;font-family:monospace}button{background:#f0b429;border:0;padding:8px 14px;font-family:monospace;cursor:pointer}</style>"
-	h = h + "<h1>Emberdeep — an agent plays; you watch</h1>"
-	h = h + "<pre>" + glog + "</pre>"
-	h = h + "<form method=\"post\" action=\"/hint\"><input name=\"text\" placeholder=\"whisper an opinion to the adventurer…\"><button>hint</button></form>"
-}
-
 func act_hint(req) (res) {
 	b := req.body
 	k := index(b, "text=")
 	t := ""
-	if k >= 0 { t = substr(b, k + 5, len(b)) }
-	t = replace(t, "+", " ")
+	if k >= 0 { t = url_decode(substr(b, k + 5, len(b))) }
 	if len(t) > 0 {
 		hint = t
 		say("")
@@ -490,6 +455,11 @@ func main() {
 	say("╚══════════════════════════════════════╝")
 	say("Router: " + ROUTER)
 	say("")
+	i := 0
+	while i < len(LORE) { say(LORE[i])  i = i + 1 }
+	say("")
+	say("GOAL: " + GOAL)
+	say("")
 	say(RD[0])
 	say("Exits: " + exits_str())
 	r := new_router()
@@ -497,6 +467,7 @@ func main() {
 	route(r, "GET", "/state", func(req) { return ok_json(state_json()) })
 	route(r, "POST", "/act", func(req) { return act(req) })
 	route(r, "POST", "/hint", func(req) { return act_hint(req) })
+	route(r, "POST", "/restart", func(req) { return restart_game(req) })
 	server := listen(8460)
 	if server < 0 { println("emberdeep: cannot listen on 8460")  return }
 	println("emberdeep on http://localhost:8460")
@@ -507,7 +478,7 @@ func main() {
 		req := parse_request_bytes(raw)
 		req.remote = peer_addr(conn)
 		res := dispatch(r, req)
-		out := "HTTP/1.1 " + res.status + "\r\nContent-Type: " + res.ctype + "\r\nContent-Length: " + str(len(res.body)) + "\r\nConnection: close\r\n\r\n" + res.body
+		out := "HTTP/1.1 " + res.status + "\r\nContent-Type: " + res.ctype + "\r\n" + cookie_lines(res) + "Content-Length: " + str(len(res.body)) + "\r\nConnection: close\r\n\r\n" + res.body
 		write(conn, out)
 		close(conn)
 	}

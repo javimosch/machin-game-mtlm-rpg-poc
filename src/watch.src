@@ -1,0 +1,18 @@
+func html_esc(s) (r) {
+	r = replace(s, "&", "&amp;")
+	r = replace(r, "<", "&lt;")
+	r = replace(r, ">", "&gt;")
+	r = replace(r, "\"", "&quot;")
+	r = replace(r, "'", "&#39;")
+}
+
+func watchpage() (h) {
+	outcome := "THE DESCENT"
+	if win == 1 { outcome = "VICTORY" }
+	if over == 1 { outcome = "DEFEAT" }
+	h = "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"4\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Emberdeep</title><style>"
+	h = h + "*{box-sizing:border-box}body{background:#0b0e14;color:#d8d5cf;font:15px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;max-width:900px;margin:28px auto;padding:0 18px}header{border-bottom:1px solid #57401f;padding-bottom:16px}h1{color:#f3b64b;font:700 28px Georgia,serif;margin:3px 0}.kicker,.label{color:#bd8950;text-transform:uppercase;letter-spacing:.12em;font-size:11px}.panel{background:#141820;border:1px solid #2b3039;border-radius:10px;padding:16px;margin:14px 0}.goal{color:#ded5c4}.objective{color:#f2c574;font-size:17px}.stats{display:flex;gap:22px;flex-wrap:wrap;color:#bfc5ce}.stats b{color:#fff}.log{white-space:pre-wrap;background:#101319;border:1px solid #2b3039;padding:18px;border-radius:10px;line-height:1.65;max-height:58vh;overflow:auto}.victory{color:#84d88a}.defeat{color:#ef7777}form{display:flex;gap:8px;margin:14px 0}input{flex:1;min-width:0;background:#101319;color:#eee;border:1px solid #414754;border-radius:6px;padding:11px;font:inherit}button{background:#bb7b31;color:#100d08;border:0;border-radius:6px;padding:10px 16px;font-weight:bold;cursor:pointer}</style></head><body>"
+	h = h + "<header><div class=\"kicker\">A machine-played dungeon · self-hosted intent router</div><h1>EMBERDEEP</h1><div class=\"" + to_lower(outcome) + "\">" + outcome + " · " + html_esc(RN[room]) + "</div></header>"
+	h = h + "<section class=\"panel\"><div class=\"stats\"><span>HP <b>" + str(hp) + "/" + str(maxhp) + "</b></span><span>Weapon <b>" + html_esc(weapon_name()) + "</b></span><span>Attack <b>" + str(attack_power()) + "</b></span><span>Gold <b>" + str(gold) + "</b></span><span>Turn <b>" + str(turn) + "</b></span></div><p class=\"label\">Current objective</p><div class=\"objective\">" + html_esc(quest_objective()) + "</div><p class=\"goal\">" + html_esc(GOAL) + "</p><div>Pack: " + html_esc(inventory_str()) + "</div></section>"
+	h = h + "<pre class=\"log\">" + html_esc(glog) + "</pre><form method=\"post\" action=\"/hint\"><input name=\"text\" placeholder=\"Whisper a hint to the adventurer…\"><button>Send hint</button></form><form method=\"post\" action=\"/restart\"><button>Restart the tale</button></form></body></html>"
+}
